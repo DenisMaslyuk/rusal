@@ -22,7 +22,7 @@ public sealed class ListCommand : ICommand
     {
         try
         {
-            var fileNames = await _repository.GetFileNamesAsync();
+            var fileNames = await _repository.GetFileNamesAsync().ConfigureAwait(false);
             var fileList = fileNames.ToList();
             
             if (!fileList.Any())

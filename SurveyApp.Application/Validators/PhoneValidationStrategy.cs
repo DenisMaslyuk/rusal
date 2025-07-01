@@ -3,7 +3,7 @@ using SurveyApp.Core.Models;
 
 namespace SurveyApp.Application.Validators;
 
-public sealed class PhoneValidationStrategy : IValidationStrategy<string>
+public sealed class PhoneValidationStrategy : IValidationStrategy
 {
     private static readonly Regex PhoneRegex = new(@"^(\+7|8)?[\s\-]?\(?[0-9]{3}\)?[\s\-]?[0-9]{3}[\s\-]?[0-9]{2}[\s\-]?[0-9]{2}$", RegexOptions.Compiled);
 

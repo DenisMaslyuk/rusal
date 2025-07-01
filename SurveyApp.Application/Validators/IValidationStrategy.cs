@@ -2,7 +2,7 @@ using SurveyApp.Core.Models;
 
 namespace SurveyApp.Application.Validators;
 
-public interface IValidationStrategy<in T>
+public interface IValidationStrategy
 {
-    ValidationResult Validate(T value);
+    ValidationResult Validate(string value);
 }

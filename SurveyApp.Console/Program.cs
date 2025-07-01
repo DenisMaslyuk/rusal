@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SurveyApp.Console.Commands;
 using SurveyApp.Console.Extensions;
@@ -48,7 +49,11 @@ class Program
 
             try
             {
-                await command.ExecuteAsync(commandArgs);
+                var result = await command.ExecuteAsync(commandArgs);
+                if (!result.IsSuccess && !string.IsNullOrEmpty(result.Error))
+                {
+                    consoleUI.ShowError(result.Error);
+                }
             }
             catch (Exception ex)
             {
@@ -59,9 +64,14 @@ class Program
 
     private static void ConfigureServices()
     {
-        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+            .Build();
 
-        services.AddSurveyServices();
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(configuration);
+        services.AddSurveyServices(configuration);
 
         _serviceProvider = services.BuildServiceProvider();
     }

@@ -1,10 +1,21 @@
 using System.Globalization;
+using Microsoft.Extensions.Options;
+using SurveyApp.Core.Interfaces;
 using SurveyApp.Core.Models;
 
 namespace SurveyApp.Application.Validators;
 
-public sealed class DateValidationStrategy : IValidationStrategy<string>
+public sealed class DateValidationStrategy : IValidationStrategy
 {
+    private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly SurveySettings _settings;
+
+    public DateValidationStrategy(IDateTimeProvider dateTimeProvider, IOptions<SurveySettings> settings)
+    {
+        _dateTimeProvider = dateTimeProvider;
+        _settings = settings.Value;
+    }
+
     public ValidationResult Validate(string dateStr)
     {
         if (string.IsNullOrWhiteSpace(dateStr))
@@ -12,22 +23,29 @@ public sealed class DateValidationStrategy : IValidationStrategy<string>
             return ValidationResult.Failure("Дата рождения не может быть пустой");
         }
 
-        if (!DateTime.TryParseExact(dateStr, "dd.MM.yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+        if (!DateTime.TryParseExact(dateStr, _settings.DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
         {
-            return ValidationResult.Failure("Дата должна быть в формате ДД.ММ.ГГГГ");
+            return ValidationResult.Failure($"Дата должна быть в формате {_settings.DateFormat}");
         }
 
-        var minAge = DateTime.Today.AddYears(-120);
-        var maxAge = DateTime.Today.AddYears(-16);
-
-        if (date < minAge)
+        var today = _dateTimeProvider.Today;
+        
+        if (date > today)
         {
-            return ValidationResult.Failure("Дата рождения не может быть более 120 лет назад");
+            return ValidationResult.Failure("Дата рождения не может быть в будущем");
         }
 
-        if (date > maxAge)
+        var minDate = today.AddYears(-_settings.MaxAge);
+        var maxDate = today.AddYears(-_settings.MinAge);
+
+        if (date < minDate)
         {
-            return ValidationResult.Failure("Возраст должен быть не менее 16 лет");
+            return ValidationResult.Failure($"Дата рождения не может быть более {_settings.MaxAge} лет назад");
+        }
+
+        if (date > maxDate)
+        {
+            return ValidationResult.Failure($"Возраст должен быть не менее {_settings.MinAge} лет");
         }
 
         return ValidationResult.Success();

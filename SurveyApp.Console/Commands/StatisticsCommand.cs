@@ -22,7 +22,7 @@ public sealed class StatisticsCommand : ICommand
 
     public async Task<Result> ExecuteAsync(string[] args)
     {
-        var result = await _statisticsService.CalculateStatisticsAsync();
+        var result = await _statisticsService.CalculateStatisticsAsync().ConfigureAwait(false);
         
         if (!result.IsSuccess)
         {

@@ -30,7 +30,7 @@ public sealed class DeleteCommand : ICommand
         
         try
         {
-            var deleted = await _repository.DeleteAsync(fileName);
+            var deleted = await _repository.DeleteAsync(fileName).ConfigureAwait(false);
             
             if (deleted)
             {

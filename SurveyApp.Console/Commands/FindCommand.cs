@@ -31,7 +31,7 @@ public sealed class FindCommand : ICommand
         
         try
         {
-            var survey = await _repository.FindAsync(fileName);
+            var survey = await _repository.FindAsync(fileName).ConfigureAwait(false);
             
             if (survey == null)
             {

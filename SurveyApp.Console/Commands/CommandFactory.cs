@@ -21,7 +21,10 @@ public sealed class CommandFactory
             { "-list_today", typeof(ListTodayCommand) },
             { "-zip", typeof(ZipCommand) },
             { "-help", typeof(HelpCommand) },
-            { "-exit", typeof(ExitCommand) }
+            { "-exit", typeof(ExitCommand) },
+            { "-goto_question", typeof(GotoQuestionCommand) },
+            { "-goto_prev_question", typeof(GotoPrevQuestionCommand) },
+            { "-restart_profile", typeof(RestartProfileCommand) }
         };
     }
 

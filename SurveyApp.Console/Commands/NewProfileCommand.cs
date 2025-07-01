@@ -1,8 +1,6 @@
-using System.Globalization;
 using SurveyApp.Application.Commands;
-using SurveyApp.Application.Validators;
+using SurveyApp.Application.Services;
 using SurveyApp.Core.Common;
-using SurveyApp.Core.Enums;
 using SurveyApp.Core.Interfaces;
 using SurveyApp.Console.UI;
 
@@ -12,51 +10,46 @@ public sealed class NewProfileCommand : ICommand
 {
     private readonly IConsoleUI _consoleUI;
     private readonly ApplicationContext _context;
-    private readonly FullNameValidationStrategy _nameValidator;
-    private readonly DateValidationStrategy _dateValidator;
-    private readonly ExperienceValidationStrategy _experienceValidator;
-    private readonly PhoneValidationStrategy _phoneValidator;
+    private readonly SurveyBuilderFactory _surveyBuilderFactory;
+    private ISurveyBuilder? _surveyBuilder;
 
     public string Name => "-new_profile";
     public string Description => "Заполнить новую анкету";
 
-    public NewProfileCommand(IConsoleUI consoleUI, ApplicationContext context)
+    public NewProfileCommand(
+        IConsoleUI consoleUI, 
+        ApplicationContext context,
+        SurveyBuilderFactory surveyBuilderFactory)
     {
         _consoleUI = consoleUI;
         _context = context;
-        _nameValidator = new FullNameValidationStrategy();
-        _dateValidator = new DateValidationStrategy();
-        _experienceValidator = new ExperienceValidationStrategy();
-        _phoneValidator = new PhoneValidationStrategy();
+        _surveyBuilderFactory = surveyBuilderFactory;
     }
 
     public async Task<Result> ExecuteAsync(string[] args)
     {
+        _surveyBuilder = _surveyBuilderFactory.CreateSurveyBuilder("developer");
+        _context.CurrentSurveyBuilder = _surveyBuilder;
         _context.IsInSurveyMode = true;
         _context.CurrentQuestionIndex = 0;
-        _context.SurveyBuilder.Reset();
 
-        await FillSurveyAsync();
+        await FillSurveyAsync().ConfigureAwait(false);
 
         return Result.Success();
     }
 
     private async Task FillSurveyAsync()
     {
-        var questions = new (string, Func<string, Task<Result>>)[]
-        {
-            ("ФИО", AskForFullName),
-            ("Дата рождения (Формат ДД.ММ.ГГГГ)", AskForBirthDate),
-            ("Любимый язык программирования", AskForProgrammingLanguage),
-            ("Опыт программирования на указанном языке (Полных лет)", AskForExperience),
-            ("Мобильный телефон", AskForPhoneNumber)
-        };
+        var totalQuestions = _surveyBuilder!.GetQuestionCount();
 
-        while (_context.CurrentQuestionIndex < questions.Length)
+        while (_context.CurrentQuestionIndex < totalQuestions)
         {
-            var (questionText, askMethod) = questions[_context.CurrentQuestionIndex];
-
-            _consoleUI.WriteLine($"{_context.CurrentQuestionIndex + 1}. {questionText}:");
+            ShowProgress();
+            
+            var prompt = _surveyBuilder.GetQuestionPrompt(_context.CurrentQuestionIndex);
+            _consoleUI.WriteLine($"{_context.CurrentQuestionIndex + 1}. {prompt}");
+            
+            ShowCurrentAnswer(_context.CurrentQuestionIndex);
 
             var input = _consoleUI.ReadLine();
 
@@ -66,14 +59,89 @@ public sealed class NewProfileCommand : ICommand
                 continue;
             }
 
-            var result = await askMethod(input);
-            if (result.IsSuccess)
+            if (string.IsNullOrWhiteSpace(input) && _surveyBuilder.HasAnswer(_context.CurrentQuestionIndex))
             {
+                _consoleUI.WriteLine("✅ Сохранен текущий ответ");
                 _context.CurrentQuestionIndex++;
+            }
+            else
+            {
+                var result = _surveyBuilder.SetAnswer(_context.CurrentQuestionIndex, input);
+                if (result.IsValid)
+                {
+                    _consoleUI.WriteLine("✅ Ответ сохранен");
+                    _context.CurrentQuestionIndex++;
+                }
+                else
+                {
+                    _consoleUI.ShowError(result.ErrorMessage);
+                }
             }
         }
 
-        _context.CurrentSurvey = _context.SurveyBuilder.Build();
+        var validationResult = _surveyBuilder.ValidateCompleteness();
+        if (!validationResult.IsValid)
+        {
+            _consoleUI.ShowError(validationResult.ErrorMessage);
+            _consoleUI.WriteLine("Используйте команды навигации для возврата к пропущенным вопросам:");
+            _consoleUI.WriteLine("  -goto_question <номер> - перейти к вопросу");
+            _consoleUI.WriteLine("  -goto_prev_question - к предыдущему вопросу");
+            _consoleUI.WriteLine("  -restart_profile - начать заново");
+            
+            // Остаемся в режиме заполнения анкеты, позволяя навигацию
+            while (_context.IsInSurveyMode)
+            {
+                _consoleUI.WriteLine("");
+                _consoleUI.Write("Введите команду навигации: ");
+                var navInput = _consoleUI.ReadLine().Trim();
+                
+                if (string.IsNullOrWhiteSpace(navInput))
+                    continue;
+                    
+                if (IsNavigationCommand(navInput))
+                {
+                    HandleNavigationCommand(navInput);
+                    if (!_context.IsInSurveyMode) break; // Если пользователь перезапустил
+                    
+                    // Возвращаемся к заполнению с текущего вопроса
+                    await ContinueSurveyFromCurrentQuestion();
+                    
+                    // Проверяем, заполнены ли все поля после продолжения
+                    var newValidationResult = _surveyBuilder.ValidateCompleteness();
+                    if (newValidationResult.IsValid)
+                    {
+                        // Все поля заполнены, выходим из навигации
+                        break;
+                    }
+                    else
+                    {
+                        _consoleUI.ShowError(newValidationResult.ErrorMessage);
+                        continue;
+                    }
+                }
+                else
+                {
+                    _consoleUI.ShowError("Доступны только команды навигации. Используйте -goto_question <номер>, -goto_prev_question или -restart_profile");
+                }
+            }
+            
+            // Если все поля заполнены, продолжаем с сохранением
+            if (_context.IsInSurveyMode)
+            {
+                var finalValidation = _surveyBuilder.ValidateCompleteness();
+                if (!finalValidation.IsValid)
+                {
+                    _consoleUI.ShowError("Анкета все еще не заполнена полностью.");
+                    return;
+                }
+            }
+            else
+            {
+                return; // Пользователь перезапустил или вышел
+            }
+        }
+
+        _context.CurrentSurvey = _surveyBuilder.BuildSurvey();
         _context.IsInSurveyMode = false;
 
         _consoleUI.ShowSuccess("Анкета заполнена успешно!");
@@ -89,6 +157,8 @@ public sealed class NewProfileCommand : ICommand
 
     private void HandleNavigationCommand(string input)
     {
+        var totalQuestions = _surveyBuilder!.GetQuestionCount();
+        
         if (input == "-goto_prev_question")
         {
             if (_context.CurrentQuestionIndex > 0)
@@ -99,14 +169,15 @@ public sealed class NewProfileCommand : ICommand
         else if (input == "-restart_profile")
         {
             _context.CurrentQuestionIndex = 0;
-            _context.SurveyBuilder.Reset();
+            _surveyBuilder = _surveyBuilderFactory.CreateSurveyBuilder("developer");
+            _context.CurrentSurveyBuilder = _surveyBuilder;
         }
         else if (input.StartsWith("-goto_question"))
         {
             var parts = input.Split(' ');
             if (parts.Length > 1 && int.TryParse(parts[1], out var questionNumber))
             {
-                if (questionNumber >= 1 && questionNumber <= 5)
+                if (questionNumber >= 1 && questionNumber <= totalQuestions)
                 {
                     _context.CurrentQuestionIndex = questionNumber - 1;
                 }
@@ -114,70 +185,82 @@ public sealed class NewProfileCommand : ICommand
         }
     }
 
-    private async Task<Result> AskForFullName(string input)
+    private void ShowProgress()
     {
-        var validation = _nameValidator.Validate(input);
-        if (!validation.IsValid)
+        var (completed, total, answeredFields, missingFields) = _surveyBuilder.GetProgress();
+        
+        _consoleUI.WriteLine($"\n📊 Прогресс: {completed}/{total} полей заполнено");
+        
+        if (answeredFields.Any())
         {
-            _consoleUI.ShowError(validation.ErrorMessage);
-            return Result.Failure(validation.ErrorMessage);
+            _consoleUI.WriteLine("✅ Заполнено:");
+            foreach (var field in answeredFields)
+            {
+                _consoleUI.WriteLine($"   • {field}");
+            }
         }
-
-        _context.SurveyBuilder.SetFullName(input);
-        return Result.Success();
+        
+        if (missingFields.Any())
+        {
+            _consoleUI.WriteLine("⚠️  Требует заполнения:");
+            foreach (var field in missingFields)
+            {
+                _consoleUI.WriteLine($"   • {field}");
+            }
+        }
+        
+        _consoleUI.WriteLine("");
     }
 
-    private async Task<Result> AskForBirthDate(string input)
+    private void ShowCurrentAnswer(int questionIndex)
     {
-        var validation = _dateValidator.Validate(input);
-        if (!validation.IsValid)
+        if (_surveyBuilder.HasAnswer(questionIndex))
         {
-            _consoleUI.ShowError(validation.ErrorMessage);
-            return Result.Failure(validation.ErrorMessage);
+            var currentAnswer = _surveyBuilder.GetCurrentAnswer(questionIndex);
+            _consoleUI.WriteLine($"💡 Текущий ответ: {currentAnswer}");
+            _consoleUI.WriteLine("Нажмите Enter для сохранения или введите новый ответ:");
         }
-
-        var date = DateTime.ParseExact(input, "dd.MM.yyyy", CultureInfo.InvariantCulture);
-        _context.SurveyBuilder.SetBirthDate(date);
-        return Result.Success();
     }
 
-    private async Task<Result> AskForProgrammingLanguage(string input)
+    private async Task ContinueSurveyFromCurrentQuestion()
     {
-        if (!ProgrammingLanguageExtensions.TryParse(input, out var language))
+        var totalQuestions = _surveyBuilder!.GetQuestionCount();
+
+        while (_context.CurrentQuestionIndex < totalQuestions)
         {
-            var availableLanguages = string.Join(", ", ProgrammingLanguageExtensions.GetAllDisplayNames());
-            _consoleUI.ShowError($"Неверный язык программирования. Доступные варианты: {availableLanguages}");
-            return Result.Failure("Неверный язык программирования");
+            ShowProgress();
+            
+            var prompt = _surveyBuilder.GetQuestionPrompt(_context.CurrentQuestionIndex);
+            _consoleUI.WriteLine($"{_context.CurrentQuestionIndex + 1}. {prompt}");
+            
+            ShowCurrentAnswer(_context.CurrentQuestionIndex);
+
+            var input = _consoleUI.ReadLine();
+
+            if (IsNavigationCommand(input))
+            {
+                HandleNavigationCommand(input);
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(input) && _surveyBuilder.HasAnswer(_context.CurrentQuestionIndex))
+            {
+                _consoleUI.WriteLine("✅ Сохранен текущий ответ");
+                _context.CurrentQuestionIndex++;
+            }
+            else
+            {
+                var result = _surveyBuilder.SetAnswer(_context.CurrentQuestionIndex, input);
+                if (result.IsValid)
+                {
+                    _consoleUI.WriteLine("✅ Ответ сохранен");
+                    _context.CurrentQuestionIndex++;
+                }
+                else
+                {
+                    _consoleUI.ShowError(result.ErrorMessage);
+                }
+            }
         }
-
-        _context.SurveyBuilder.SetLanguage(language);
-        return Result.Success();
-    }
-
-    private async Task<Result> AskForExperience(string input)
-    {
-        var validation = _experienceValidator.Validate(input);
-        if (!validation.IsValid)
-        {
-            _consoleUI.ShowError(validation.ErrorMessage);
-            return Result.Failure(validation.ErrorMessage);
-        }
-
-        var experience = int.Parse(input);
-        _context.SurveyBuilder.SetExperienceYears(experience);
-        return Result.Success();
-    }
-
-    private async Task<Result> AskForPhoneNumber(string input)
-    {
-        var validation = _phoneValidator.Validate(input);
-        if (!validation.IsValid)
-        {
-            _consoleUI.ShowError(validation.ErrorMessage);
-            return Result.Failure(validation.ErrorMessage);
-        }
-
-        _context.SurveyBuilder.SetPhoneNumber(input);
-        return Result.Success();
     }
 }

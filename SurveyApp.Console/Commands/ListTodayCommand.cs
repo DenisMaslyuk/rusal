@@ -22,7 +22,7 @@ public sealed class ListTodayCommand : ICommand
     {
         try
         {
-            var todaySurveys = await _repository.GetTodayAsync();
+            var todaySurveys = await _repository.GetTodayAsync().ConfigureAwait(false);
             var surveyList = todaySurveys.ToList();
             
             if (!surveyList.Any())
@@ -34,7 +34,8 @@ public sealed class ListTodayCommand : ICommand
             _consoleUI.WriteLine("Список анкет, созданных сегодня:");
             foreach (var survey in surveyList)
             {
-                _consoleUI.WriteLine($"- {survey.GetFileName()}");
+                var fileName = $"{survey.FullName}_{survey.BirthDate:dd_MM_yyyy}.txt";
+                _consoleUI.WriteLine($"- {fileName}");
             }
 
             return Result.Success();

@@ -30,7 +30,7 @@ public sealed class ZipCommand : ICommand
         var fileName = args[0];
         var destinationPath = args[1];
         
-        var result = await _archiveService.CreateArchiveAsync(fileName, destinationPath);
+        var result = await _archiveService.CreateArchiveAsync(fileName, destinationPath).ConfigureAwait(false);
         
         if (result.IsSuccess)
         {

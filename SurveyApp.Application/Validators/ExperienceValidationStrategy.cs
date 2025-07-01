@@ -2,7 +2,7 @@ using SurveyApp.Core.Models;
 
 namespace SurveyApp.Application.Validators;
 
-public sealed class ExperienceValidationStrategy : IValidationStrategy<string>
+public sealed class ExperienceValidationStrategy : IValidationStrategy
 {
     public ValidationResult Validate(string experienceStr)
     {

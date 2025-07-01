@@ -14,35 +14,41 @@ public enum ProgrammingLanguage
 
 public static class ProgrammingLanguageExtensions
 {
-    private static readonly Dictionary<string, ProgrammingLanguage> LanguageMap = new()
+    private static readonly Dictionary<string, ProgrammingLanguage> DisplayNameToEnum = new()
     {
-        { "PHP", ProgrammingLanguage.PHP },
-        { "JavaScript", ProgrammingLanguage.JavaScript },
-        { "C", ProgrammingLanguage.C },
-        { "C++", ProgrammingLanguage.CPlusPlus },
-        { "Java", ProgrammingLanguage.Java },
-        { "C#", ProgrammingLanguage.CSharp },
-        { "Python", ProgrammingLanguage.Python },
-        { "Ruby", ProgrammingLanguage.Ruby }
+        ["PHP"] = ProgrammingLanguage.PHP,
+        ["JavaScript"] = ProgrammingLanguage.JavaScript,
+        ["C"] = ProgrammingLanguage.C,
+        ["C++"] = ProgrammingLanguage.CPlusPlus,
+        ["Java"] = ProgrammingLanguage.Java,
+        ["C#"] = ProgrammingLanguage.CSharp,
+        ["Python"] = ProgrammingLanguage.Python,
+        ["Ruby"] = ProgrammingLanguage.Ruby
     };
+
+    private static readonly Dictionary<ProgrammingLanguage, string> EnumToDisplayName =
+        DisplayNameToEnum.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
+
+    private static readonly string[] AllDisplayNames = DisplayNameToEnum.Keys.ToArray();
 
     public static bool TryParse(string value, out ProgrammingLanguage language)
     {
-        return LanguageMap.TryGetValue(value, out language);
+        return DisplayNameToEnum.TryGetValue(value, out language);
     }
 
     public static string ToDisplayString(this ProgrammingLanguage language)
     {
-        return language switch
-        {
-            ProgrammingLanguage.CPlusPlus => "C++",
-            ProgrammingLanguage.CSharp => "C#",
-            _ => language.ToString()
-        };
+        return EnumToDisplayName.TryGetValue(language, out var displayName)
+            ? displayName
+            : language.ToString();
     }
 
-    public static IEnumerable<string> GetAllDisplayNames()
+    /// <summary>
+    /// Возвращает все отображаемые имена языков программирования
+    /// </summary>
+    /// <returns>Массив отображаемых имен</returns>
+    public static string[] GetAllDisplayNames()
     {
-        return LanguageMap.Keys;
+        return AllDisplayNames;
     }
 }

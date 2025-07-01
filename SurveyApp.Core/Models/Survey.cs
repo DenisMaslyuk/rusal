@@ -9,22 +9,19 @@ public sealed record Survey
     public ProgrammingLanguage Language { get; init; }
     public int ExperienceYears { get; init; }
     public string PhoneNumber { get; init; } = string.Empty;
-    public DateTime CreatedAt { get; init; } = DateTime.Now;
+    public DateTime CreatedAt { get; init; }
+    public Dictionary<string, string> Answers { get; init; } = new();
 
-    public int Age => CalculateAge();
-
-    private int CalculateAge()
+    public int CalculateAge(DateTime referenceDate)
     {
-        var today = DateTime.Today;
-        var age = today.Year - BirthDate.Year;
+        var age = referenceDate.Year - BirthDate.Year;
         
-        if (BirthDate.Date > today.AddYears(-age))
+        if (BirthDate.Date > referenceDate.AddYears(-age))
             age--;
             
         return age;
     }
 
-    public string GetFileName() => $"{FullName.Replace(" ", "_")}.txt";
 }
 
 public sealed record SurveyStatistics

@@ -2,7 +2,7 @@ using SurveyApp.Core.Models;
 
 namespace SurveyApp.Application.Validators;
 
-public sealed class FullNameValidationStrategy : IValidationStrategy<string>
+public sealed class FullNameValidationStrategy : IValidationStrategy
 {
     public ValidationResult Validate(string fullName)
     {
